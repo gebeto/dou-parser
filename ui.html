@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jobs</title>
+  <style>
+    :root {
+      --bg: #fff;
+      --fg: #1a1a1a;
+      --muted: #777;
+      --line: #eee;
+      --accent: #2563eb;
+      --mark: #fff3a3;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111;
+        --fg: #e6e6e6;
+        --muted: #8a8a8a;
+        --line: #222;
+        --accent: #6ea8fe;
+        --mark: #5c4d00;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+    header {
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 0 12px;
+    }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      font: inherit;
+      color: inherit;
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    .count { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    a:hover { text-decoration: underline; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .desc { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    mark { background: var(--mark); color: inherit; border-radius: 2px; }
+    .empty { color: var(--muted); padding: 32px 0; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <input id="q" type="search" placeholder="Search jobs…" autofocus autocomplete="off" />
+      <div class="count" id="count">Loading…</div>
+    </div>
+  </header>
+  <main class="wrap">
+    <ul id="list"></ul>
+  </main>
+
+  <script>
+    const $q = document.getElementById("q");
+    const $count = document.getElementById("count");
+    const $list = document.getElementById("list");
+    let jobs = [];
+
+    const escapeHtml = (s) =>
+      String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    function highlight(text, terms) {
+      const safe = escapeHtml(text);
+      if (!terms.length) return safe;
+      const re = new RegExp(`(${terms.map((t) => escapeRe(escapeHtml(t))).join("|")})`, "gi");
+      return safe.replace(re, "<mark>$1</mark>");
+    }
+
+    function render() {
+      const query = $q.value.trim();
+      const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const found = terms.length ? jobs.filter((j) => terms.every((t) => j._hay.includes(t))) : jobs;
+
+      $count.textContent = `${found.length} of ${jobs.length} jobs`;
+      $list.innerHTML = found.length
+        ? found
+            .map(
+              (j) => `<li>
+                <a href="${escapeHtml(j.link)}" target="_blank" rel="noopener">${highlight(j.title, terms)}</a>
+                <div class="meta">${[highlight(j.company, terms), highlight(j.location, terms), escapeHtml(j.date)].filter(Boolean).join(" · ")}</div>
+                ${j.description ? `<div class="desc">${highlight(j.description, terms)}</div>` : ""}
+              </li>`
+            )
+            .join("")
+        : `<div class="empty">No jobs found</div>`;
+
+      const hash = query ? `#q=${encodeURIComponent(query)}` : "";
+      history.replaceState(null, "", hash || location.pathname);
+    }
+
+    let timer;
+    $q.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(render, 150);
+    });
+
+    const initial = new URLSearchParams(location.hash.slice(1)).get("q");
+    if (initial) $q.value = initial;
+
+    fetch("/jobs.json")
+      .then((r) => {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      })
+      .then((data) => {
+        jobs = data.map((j) => ({
+          ...j,
+          _hay: [j.title, j.company, j.location, j.description].join(" ").toLowerCase(),
+        }));
+        render();
+      })
+      .catch((e) => ($count.textContent = `Failed to load jobs.json (${e.message})`));
+  </script>
+</body>
+</html>
