@@ -9,7 +9,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "ui": "node server.js"
+    "build": "node build.js",
+    "serve": "npx serve dist"
   },
   "dependencies": {
     "cheerio": "^1.2.0"
